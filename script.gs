@@ -9,10 +9,14 @@ const DIGIKEY_TOKEN_URL_V4 = 'https://api.digikey.com/v1/oauth2/token';
 const DIGIKEY_PRODUCT_SEARCH_URL_V4 = 'https://api.digikey.com/products/v4/search/keyword';
 
 
+
 var mouserCol = 2;
 var digikeyCol = 6;
 var checkboxCol = 11;
+var logCol = 12;
 
+
+// curl -X POST "https://api.mouser.com/api/v1/search/keyword?apiKey=xxxxxxxxxxxxxxxxx" -H "accept: application/json" -H "Content-Type: application/json" -d "{ \"SearchByKeywordRequest\": { \"keyword\": \"CA11976_LAURA-M\", \"records\": 0, \"startingRecord\": 0, \"searchOptions\": \"string\", \"searchWithYourSignUpLanguage\": \"string\" }}"
 
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
@@ -23,7 +27,7 @@ function onOpen() {
 
 
 function test() {
-  updateRow(7);
+  updateRow(3);
 }
 
 
@@ -34,50 +38,15 @@ function updateAll() {
 
   rows.forEach(function(row, index) {
     if (index < 2) return;
-    const partNumber = row[0];
-    if (!partNumber) return;
-
-    const partInfo = callMouserAPI(partNumber);
-
-    if(partInfo) {
-
-      // Extract relevant fields
-      const availability = partInfo.Availability || 'N/A';
-      const dataSheetUrl = partInfo.DataSheetUrl || 'N/A';
-      const imagePath = partInfo.ImagePath || 'N/A';
-      const priceForQty1 = partInfo.PriceBreaks?.find(pb => pb.Quantity === 1)?.Price || 'N/A';
-      const availabilityInStock = partInfo.AvailabilityInStock || 'N/A';
-      const factoryStock = partInfo.FactoryStock || 'N/A';
-      const leadTime = partInfo.LeadTime || 'N/A';
-      const productDetailUrl = partInfo.ProductDetailUrl || 'N/A';
-      
-      // Write the data into columns B-G
-      sheet.getRange(index + 1, mouserCol, 1, 4).setValues([[
-        priceForQty1, availabilityInStock, leadTime, `=hyperlink("${productDetailUrl}","mouser.ca")`
-      ]]);
-
-    }
-
-    const partDigikey = callDigikeyAPI(partNumber);
-
-    if(partDigikey) {
-
-      const quantityAvailable = partDigikey.QuantityAvailable || 0.0;
-      const manufacturerLeadWeeks = `${partDigikey.ManufacturerLeadWeeks} weeks` || "N/A";
-      const unitPrice = partDigikey.ProductVariations?.[0]?.StandardPricing?.[0]?.UnitPrice || "N/A";
-      const productUrl = partDigikey.ProductUrl || "N/A";
-
-      sheet.getRange(index + 1, digikeyCol, 1, 4).setValues([[
-        unitPrice, quantityAvailable, manufacturerLeadWeeks, `=hyperlink("${productUrl}","digikey.ca")`
-      ]]);
-
-    }
+    updateRow(index+1);
 
   });
 
   var currentDate = new Date();
   var formattedDate = Utilities.formatDate(currentDate, Session.getScriptTimeZone(), "yyyy/MM/dd HH:mm");
   sheet.getRange(1, 1).setValue("last updated: "+formattedDate);
+
+  log("");  // to clear the log field
   
 }
 
@@ -85,75 +54,80 @@ function updateAll() {
 
 
 function updateRow(rowID) {
-  // get all product numbers
+
   var sheet = SpreadsheetApp.getActiveSheet();
-  var rows = sheet.getDataRange().getValues();
+  var row = sheet.getRange(rowID,1,1,1).getValues();
 
-  sheet.getRange(rowID,checkboxCol+1).setValue(`updating`);
-
-  // const partNumbers = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues().flat();
+  sheet.getRange(rowID,logCol).setValue(`updating`);
 
 
-  const partNumber = rows[rowID-1][0];
-  sheet.getRange(rowID,checkboxCol+1).setValue(partNumber);
+  const partNumber = row[0][0];
+  Logger.log("row "+rowID+": "+partNumber);
+
   if (!partNumber) return;
 
+  const partMouser = callMouserAPI(partNumber);
+  // Logger.log(partMouser);
   
-  const partInfo = callMouserAPI(partNumber);
-  
-  if(partInfo) {
-    // sheet.getRange(rowID,checkboxCol+1).setValue(`add Mouser`);
+  if(partMouser) {
+    sheet.getRange(rowID,logCol).setValue(`add Mouser`);
 
     // Extract relevant fields
-    const availability = partInfo.Availability || 'N/A';
-    const dataSheetUrl = partInfo.DataSheetUrl || 'N/A';
-    const imagePath = partInfo.ImagePath || 'N/A';
-    const priceForQty1 = partInfo.PriceBreaks?.find(pb => pb.Quantity === 1)?.Price || 'N/A';
-    const availabilityInStock = partInfo.AvailabilityInStock || 'N/A';
-    const factoryStock = partInfo.FactoryStock || 'N/A';
-    const leadTime = partInfo.LeadTime || 'N/A';
-    const productDetailUrl = partInfo.ProductDetailUrl || 'N/A';
+    const availability = partMouser.Availability || 'N/A';
+    const dataSheetUrl = partMouser.DataSheetUrl || 'N/A';
+    const imagePath = partMouser.ImagePath || 'N/A';
+    const priceForQty1 = partMouser.PriceBreaks?.find(pb => pb.Quantity === 1)?.Price || 'N/A';
+    const availabilityInStock = partMouser.AvailabilityInStock || 'N/A';
+    const factoryStock = partMouser.FactoryStock || 'N/A';
+    const leadTime = partMouser.LeadTime || 'N/A';
+    const productDetailUrl = partMouser.ProductDetailUrl || 'N/A';
     
-    // Write the data into columns B-G
+    sheet.getRange(rowID,logCol).setValue(`writeMouser`);
     sheet.getRange(rowID, mouserCol, 1, 4).setValues([[
       priceForQty1, availabilityInStock, leadTime, `=hyperlink("${productDetailUrl}","mouser.ca")`
     ]]);
-
-    return;
+    
 
   }
 
   const partDigikey = callDigikeyAPI(partNumber);
+  // Logger.log(partDigikey);
 
   if(partDigikey) {
 
-    // sheet.getRange(rowID,checkboxCol+1).setValue(`add Digikey`);
+    // sheet.getRange(rowID,logCol).setValue(`add Digikey`);
 
     const quantityAvailable = partDigikey.QuantityAvailable || 0.0;
     const manufacturerLeadWeeks = `${partDigikey.ManufacturerLeadWeeks} weeks` || "N/A";
-    const unitPrice = partDigikey.ProductVariations?.[0]?.StandardPricing?.[0]?.UnitPrice || "N/A";
+    const unitPrice = partDigikey.UnitPrice || "N/A";
     const productUrl = partDigikey.ProductUrl || "N/A";
-
+    productUrl.toString().replace("digikey.com", "digikey.ca");
+    let updatedUrl = productUrl.replace(/digikey\.com/, "digikey.ca");
+    Logger.log(updatedUrl);
+    sheet.getRange(rowID,logCol).setValue(`writeDigikey`);
     sheet.getRange(rowID, digikeyCol, 1, 4).setValues([[
-      unitPrice, quantityAvailable, manufacturerLeadWeeks, `=hyperlink("${productUrl}","digikey.ca")`
+      unitPrice, quantityAvailable, manufacturerLeadWeeks, `=hyperlink("${updatedUrl}","digikey.ca")`
     ]]);
+    
 
   }
 
 
+  sheet.getRange(rowID,logCol).setValue(``);
   
 }
-
 
 
 
 function log(line) {
   var sheet = SpreadsheetApp.getActiveSheet();
   Logger.log(line);
-  sheet.getRange(1,checkboxCol).setValue(line);
+  sheet.getRange(1,logCol).setValue(line);
+
+  var logSheet = SpreadsheetApp.getActive().getSheetByName('log')
+  var content = logSheet.getRange(1,1).getValue();
+  logSheet.getRange(1,1).setValue(content + line);
 }
-
-
 
 
 function callMouserAPI(partNumber) {
@@ -191,9 +165,6 @@ function callMouserAPI(partNumber) {
 
 
 
-
-
-
 function callDigikeyAPI(partNumber) {
 
   log(`Digikey API request for part ${partNumber}`);
@@ -213,10 +184,11 @@ function callDigikeyAPI(partNumber) {
   try {
     const searchResult = productSearch(oauthToken,partNumber);
     const jsonResponse = JSON.parse(searchResult.getContentText());
-
+    
     const products = jsonResponse.ExactMatches;
+    
     const product = products[0]; // Extract the first product
-    log(`return product ${partNumber}`);
+    Logger.log(product);
     return product;
 
   } catch (error) {
@@ -243,8 +215,6 @@ function getOAuthToken() {
   
   return responseData.access_token ? responseData : null;
 }
-
-
 
 // Perform a product search using the Digi-Key API.
 function productSearch(token, keyword) {
@@ -273,25 +243,24 @@ function productSearch(token, keyword) {
 
 
 
-function onEdit(e) {
 
-  var sheet = SpreadsheetApp.getActiveSheet();
-  var rows = sheet.getDataRange().getValues();
 
-  rows.forEach(function(row, index) {
-    if (index < 2) return;
-    const checkBox = row[checkboxCol-1];
-    // Logger.log("checkbox "+index+ " : "+checkBox);
-    if(checkBox === true) {
-      // Logger.log("checkbox is true "+index);
-      sheet.getRange(index+1,checkboxCol+1).setValue(`updateRow ${index+1}`);
-      updateRow(index+1);
-      log('done');
-      sheet.getRange(index+1,checkboxCol+1).setValue('Done.');
-      sheet.getRange(index+1,checkboxCol).setValue(false);;
-    }
+// function onEdit(e) {
 
-  });
+//   var sheet = SpreadsheetApp.getActiveSheet();
+//   var rows = sheet.getDataRange().getValues();
+
+//   rows.forEach(function(row, index) {
+//     if (index < 2) return;
+//     const checkBox = row[checkboxCol-1];
+//     if(checkBox === true) {
+//       updateRow(index+1);
+//       log('done');
+//       sheet.getRange(index+1,logCol).setValue('Done.');
+//       sheet.getRange(index+1,checkboxCol).setValue(false);;
+//     }
+
+//   });
 
   
-}
+// }
